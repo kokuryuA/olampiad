@@ -74,6 +74,7 @@ export default function AnnouncementsPage() {
             <AnnouncementCard
               key={announcement.id}
               announcement={announcement}
+              isOwner={announcement.user_id === announcement?.id}
             />
           ))}
         </div>
