@@ -15,6 +15,7 @@ interface Announcement {
   image_url: string | null
   created_at: string
   user_id: string
+  category: string
 }
 
 interface Stats {
@@ -24,8 +25,44 @@ interface Stats {
   averagePrice: number
 }
 
+interface Conversation {
+  announcement_id: string
+  announcement_title: string
+  other_user: {
+    id: string
+    email: string
+  }
+  last_message: string
+  last_message_time: string
+  unread_count: number
+}
+
+interface MessageResponse {
+  id: string
+  sender_id: string
+  receiver_id: string
+  announcement_id: string
+  announcements: {
+    id: string
+    title: string
+    user_id: string
+  }
+  sender: {
+    id: string
+    email: string
+  }
+  receiver: {
+    id: string
+    email: string
+  }
+  content: string
+  created_at: string
+  is_read: boolean
+}
+
 export default function DashboardPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  const [conversations, setConversations] = useState<Conversation[]>([])
   const [stats, setStats] = useState<Stats>({
     totalItems: 0,
     totalViews: 0,
@@ -49,14 +86,17 @@ export default function DashboardPage() {
         return
       }
 
-      // Fetch user's announcements
+      // Fetch user's announcements with proper error handling
       const { data: announcementsData, error: announcementsError } = await supabase
         .from('announcements')
         .select('*')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: false })
 
-      if (announcementsError) throw announcementsError
+      if (announcementsError) {
+        console.error('Error fetching announcements:', announcementsError)
+        throw announcementsError
+      }
 
       setAnnouncements(announcementsData || [])
 
@@ -71,6 +111,81 @@ export default function DashboardPage() {
         totalSales: 0, // You'll need to implement sales tracking
         averagePrice
       })
+
+      // Fetch conversations
+      const { data: messagesData, error: messagesError } = await supabase
+        .from('messages')
+        .select(`
+          id,
+          sender_id,
+          receiver_id,
+          announcement_id,
+          announcements!messages_announcement_id_fkey (
+            id,
+            title,
+            user_id
+          ),
+          sender:sender_id!inner (
+            id,
+            email
+          ),
+          receiver:receiver_id!inner (
+            id,
+            email
+          ),
+          content,
+          created_at,
+          is_read
+        `)
+        .or(`sender_id.eq.${session.user.id},receiver_id.eq.${session.user.id}`)
+        .order('created_at', { ascending: false })
+
+      if (messagesError) {
+        console.error('Error fetching messages:', messagesError)
+        throw messagesError
+      }
+
+      const conversationsMap = new Map<string, Conversation>()
+      if (messagesData) {
+        const typedMessages = messagesData.map(msg => ({
+          ...msg,
+          announcements: msg.announcements[0],
+          sender: msg.sender[0],
+          receiver: msg.receiver[0]
+        })) as MessageResponse[]
+
+        for (const message of typedMessages) {
+          const otherUser = message.sender_id === session.user.id 
+            ? message.receiver 
+            : message.sender
+
+          if (!message.announcement_id || !message.announcements?.title) {
+            continue
+          }
+
+          const existing = conversationsMap.get(message.announcement_id)
+          
+          if (existing) {
+            if (message.receiver_id === session.user.id && !message.is_read) {
+              existing.unread_count++
+            }
+          } else {
+            conversationsMap.set(message.announcement_id, {
+              announcement_id: message.announcement_id,
+              announcement_title: message.announcements.title,
+              other_user: {
+                id: otherUser.id,
+                email: otherUser.email
+              },
+              last_message: message.content,
+              last_message_time: message.created_at,
+              unread_count: (message.receiver_id === session.user.id && !message.is_read) ? 1 : 0
+            })
+          }
+        }
+      }
+
+      setConversations(Array.from(conversationsMap.values()))
     } catch (err: unknown) {
       console.error('Error fetching dashboard data:', err)
       setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
@@ -164,7 +279,7 @@ export default function DashboardPage() {
                         </div>
                       )}
                     </div>
-                    <div className="p-6">
+                    <div className="p-4">
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">
                         {announcement.title}
                       </h3>
@@ -197,10 +312,63 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Wishlist */}
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-6">My Wishlist</h2>
-            <Wishlist />
+          <div className="space-y-8">
+            {/* Messages Section */}
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900">Recent Messages</h2>
+                <Link
+                  href="/messages"
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-700 hover:bg-indigo-800"
+                >
+                  View All
+                </Link>
+              </div>
+
+              {conversations.length === 0 ? (
+                <div className="text-center py-12 bg-white rounded-lg shadow">
+                  <p className="text-gray-700">No messages yet</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {conversations.slice(0, 5).map((conversation) => (
+                    <Link
+                      key={conversation.announcement_id}
+                      href={`/messages?announcement=${conversation.announcement_id}`}
+                      className="block bg-white rounded-lg shadow p-4 hover:bg-gray-50"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-medium text-gray-900">
+                            {conversation.announcement_title}
+                          </h3>
+                          <p className="text-sm text-gray-500">
+                            {conversation.other_user.email}
+                          </p>
+                        </div>
+                        {conversation.unread_count > 0 && (
+                          <span className="bg-indigo-600 text-white text-xs px-2 py-1 rounded-full">
+                            {conversation.unread_count}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-sm text-gray-600 truncate">
+                        {conversation.last_message}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {new Date(conversation.last_message_time).toLocaleString()}
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Wishlist */}
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-6">My Wishlist</h2>
+              <Wishlist />
+            </div>
           </div>
         </div>
       </main>

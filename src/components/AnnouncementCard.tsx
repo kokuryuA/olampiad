@@ -14,14 +14,16 @@ interface Announcement {
   image_url: string | null
   created_at: string
   user_id: string
+  category: string
 }
 
 interface AnnouncementCardProps {
   announcement: Announcement
   isOwner: boolean
+  priority?: boolean
 }
 
-export default function AnnouncementCard({ announcement, isOwner }: AnnouncementCardProps) {
+export default function AnnouncementCard({ announcement, isOwner, priority = false }: AnnouncementCardProps) {
   const router = useRouter()
   const supabase = createClientComponentClient()
   const [isInWishlist, setIsInWishlist] = useState(false)
@@ -32,12 +34,17 @@ export default function AnnouncementCard({ announcement, isOwner }: Announcement
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('wishlist')
         .select('id')
         .eq('user_id', session.user.id)
         .eq('announcement_id', announcement.id)
-        .single()
+        .maybeSingle()
+
+      if (error) {
+        console.error('Error checking wishlist status:', error)
+        return
+      }
 
       setIsInWishlist(!!data)
     } catch (error) {
@@ -116,6 +123,8 @@ export default function AnnouncementCard({ announcement, isOwner }: Announcement
               src={announcement.image_url}
               alt={announcement.title}
               fill
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              priority={priority}
               className="object-cover"
             />
           ) : (
@@ -125,9 +134,12 @@ export default function AnnouncementCard({ announcement, isOwner }: Announcement
           )}
         </div>
         <div className="p-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
             {announcement.title}
           </h3>
+          <p className="text-sm text-gray-500 mb-2">
+            {announcement.category}
+          </p>
           <p className="text-gray-700 text-sm mb-4 line-clamp-2">
             {announcement.description}
           </p>

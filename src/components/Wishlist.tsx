@@ -39,7 +39,7 @@ export default function Wishlist() {
         .from('wishlist')
         .select(`
           id,
-          announcement:announcements (
+          announcement:announcements!inner (
             id,
             title,
             description,
@@ -117,6 +117,7 @@ export default function Wishlist() {
                   src={item.announcement.image_url}
                   alt={item.announcement.title}
                   fill
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                   className="object-cover"
                 />
               ) : (

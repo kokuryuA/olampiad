@@ -4,6 +4,20 @@ import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useRouter } from 'next/navigation'
 
+const CATEGORIES = [
+  'Electronics',
+  'Clothing',
+  'Books',
+  'Home & Garden',
+  'Sports',
+  'Toys & Games',
+  'Beauty & Health',
+  'Automotive',
+  'Other'
+] as const
+
+type Category = typeof CATEGORIES[number]
+
 interface CreateAnnouncementProps {
   isEdit?: boolean;
   initialData?: {
@@ -12,6 +26,7 @@ interface CreateAnnouncementProps {
     description: string;
     price: number;
     image_url: string | null;
+    category: Category;
   };
 }
 
@@ -19,6 +34,7 @@ export default function CreateAnnouncement({ isEdit = false, initialData }: Crea
   const [title, setTitle] = useState(initialData?.title || '')
   const [description, setDescription] = useState(initialData?.description || '')
   const [price, setPrice] = useState(initialData?.price?.toString() || '')
+  const [category, setCategory] = useState<Category>(initialData?.category || 'Other')
   const [image, setImage] = useState<File | null>(null)
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(initialData?.image_url || null)
   const [error, setError] = useState<string | null>(null)
@@ -105,6 +121,7 @@ export default function CreateAnnouncement({ isEdit = false, initialData }: Crea
             description,
             price: parseFloat(price),
             image_url: imageUrl,
+            category,
           })
           .eq('id', initialData.id)
 
@@ -124,6 +141,7 @@ export default function CreateAnnouncement({ isEdit = false, initialData }: Crea
             description,
             price: parseFloat(price),
             image_url: imageUrl,
+            category,
             user_id: session.user.id
           })
 
@@ -184,6 +202,25 @@ export default function CreateAnnouncement({ isEdit = false, initialData }: Crea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                 />
+              </div>
+
+              <div>
+                <label htmlFor="category" className="block text-sm font-medium text-gray-900">
+                  Category
+                </label>
+                <select
+                  id="category"
+                  required
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value as Category)}
+                >
+                  {CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
